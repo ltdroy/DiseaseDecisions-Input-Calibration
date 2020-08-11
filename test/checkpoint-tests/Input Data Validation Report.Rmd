@@ -1,0 +1,231 @@
+---
+title: "Input Data Validation Report (DiseaseDecisions)"
+author: "L T Droy"
+date: "09/07/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+```
+
+## Input Data
+
+In order to generate a synthetic population with a realistic demographic structure at the individual (age, sex) and household (age and sex composition of the household) level, we sampled individuals and households directly from empirical survey data. The data we used was taken from the UK 2014-15 Time Use Survey (UKTUS). The data from this survey is available via the UK Data Service. 
+
+The UKTUS study was conducted by a commercial social research service, NatCen, along with the Northern Ireland Statistics and Research Agency (NISRA) - on behalf of the Centre for Time Use Research (CTUR). 
+
+The UKTUS study targeted a representative sample of households and individuals in the UK. It was carried out between April 2014 and December 2016. It aimed to collect detailed measures on the daily time-use of all members of each household aged 8 and above. It also recorded basic information about household members below this age (measured age and sex).
+
+The availability of this household composition data made the UKTUS dataset ideally suited for the purposes of our analysis. In essence, it provided a basic demographic census of all members of a representative sample of households. By sampling households from this dataset, therefore, we were able to generate a synthetic population (grouped into households) with a realistic demographic structure. We would expect this population to be realistic in terms of the marginal distributions of both household (e.g. number of household members) and individual (e.g. distribution of individual ages) characteristics (see Appendix). 
+
+The UKTUS dataset includes weights at the household level to account for household non-response and the sampling design. These weights were typically close to 1 (IQR = [0.808,1.14]). To avoid over-complicating the process of sampling households from the UKTUS dataset, we sampled households from the dataset with equal probability to build our synthetic population. We tested this approach through validation against independent demographic data (see below).
+
+We validated the individual and household demographic structure of the UKTUS dataset (i.e. our synthetic population) against independent summary statistics for the UK population (published by the Office of National Statistics, ONS). Side-by-side comparisons with ONS summary data are reported in the Appendix. These support the assumption that (without adjustment) synthetic populations of households drawn from the UKTUS dataset effectively reproduce key features of the marginal and joint distributions of UK population characteristics (age, sex and household composition), at the individual and household level. 
+
+# what we did
+
+
+
+
+
+
+
+
+
+```{r}
+
+hh_ind <- read.csv("../output/model-pop-final.csv")
+
+ons_age_gender <- read.csv("../input/age-structure-stripped.csv", stringsAsFactors = FALSE) %>%
+  dplyr::select(Age_c=Age, N, Sex) %>%
+  dplyr::group_by(Sex) %>%
+  dplyr::mutate(prop = N / sum(N)) %>%
+  dplyr::mutate(source="ONS")
+
+ons_hh_size <- read.csv("../input/household-sizes-stripped.csv", stringsAsFactors = FALSE)
+
+ons_single_hh_age <- read.csv("../input/single-person-households-by-age.csv", stringsAsFactors = FALSE) %>% 
+  dplyr::mutate(Source="ONS") %>%
+  dplyr::filter(Group != "All") %>%
+  dplyr::group_by(Group) %>%
+  dplyr::mutate(
+    Prop = Count / sum(Count)
+  )
+  
+
+```
+
+## Comparison with UK Age Structure
+
+Here we compare the relatively frequencies of individual ages (by gender) in our data with those based on ONS data for the 2018 UK population.
+
+```{r}
+
+## Cutting hh_ind$Age into hh_ind$Age_c
+hh_ind$Age_c <- cut(hh_ind$Age,
+  include.lowest = TRUE,
+  right = FALSE,
+  breaks = c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 100)
+)
+
+hh_ind$Age_c <- str_extract(string = hh_ind$Age_c, pattern = "(?<=\\[)[^.]+(?=\\,)")
+
+uktus_age_gender <- hh_ind %>%
+  dplyr::mutate(Age_c = as.integer(Age_c)) %>%
+  dplyr::group_by(Age_c, Sex) %>%
+  dplyr::summarise(N = n()) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(Age_c, N, Sex) %>%
+  dplyr::group_by(Sex) %>%
+  dplyr::mutate(
+    prop = N / sum(N),
+    source = "UKTUS"
+  )
+
+combined_data <- rbind(
+  ons_age_gender,
+  uktus_age_gender
+)
+
+p1 <- ggplot(combined_data, aes(x=Age_c, y=prop)) + 
+  geom_bar(alpha=0.5, stat="identity", width = 1) +
+  facet_grid(rows = vars(Sex), cols = vars(source)) +
+  labs(
+    x = "Age in Years (1-89, 90+)",
+    y = "Relative Freq (Proportion)"
+  )
+
+ggsave(p1, filename = "../output/graphics/age_structure_comparison.png", )
+p1
+
+```
+
+## Comparison of Household Size Distribution
+
+```{r}
+
+ons_hh_size_processed <- ons_hh_size %>%
+  dplyr::mutate(Prop = Count.2019 / sum(Count.2019),
+                Source = "ONS"
+                ) %>%
+  dplyr::select(Size, Count = Count.2019, Prop, Source)
+
+uktus_hh_size <- hh_ind %>%
+  dplyr::group_by(HH_id) %>%
+  dplyr::summarise(Size = n()) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(
+    Size = case_when(
+      Size == 1 ~ 1,
+      Size == 2 ~ 2,
+      Size == 3 ~ 3,
+      Size == 4 ~ 4,
+      Size == 5 ~ 5,
+      Size >= 6 ~ 6
+    )
+  ) %>%
+  dplyr::group_by(Size) %>%
+  dplyr::summarise(Count = n()) %>%
+  dplyr::ungroup() %>%
+   dplyr::mutate(
+    Prop = Count / sum(Count),
+    Source = "UKTUS"
+  ) %>%
+  dplyr::select(
+    Size, 
+    Count,
+    Prop,
+    Source
+  )
+
+combined_data_hh <- rbind(
+  ons_hh_size_processed, 
+  uktus_hh_size
+)
+  
+p2 <- ggplot(combined_data_hh, aes(x=Size, y=Prop, fill=Source)) + 
+  geom_bar(alpha=0.5, stat="identity", position="dodge") +
+  scale_x_continuous(breaks=c(1,2,3,4,5,6)) +
+  labs(
+    x = "Household Size (1-5, 6+)",
+    y = "Relative Freq (Proportion)"
+  )
+
+ggsave(p2, filename = "../output/graphics/household_size_dist_comparison.png", )
+
+
+p2
+
+
+```
+## Comparison of Single-Occupancy Household Distribution (By Age, Gender)
+
+```{r}
+
+uktus_single_hh <- hh_ind %>%
+  dplyr::group_by(HH_id) %>%
+  dplyr::summarise(
+    Size = n(),
+    Age = Age[1],
+    Sex = Sex[1]
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::filter(Size == 1, Age > 15) %>%
+  dplyr::mutate(
+    Age.group = case_when(
+      Age >= 16 & Age <= 24 ~ "16-24",
+      Age >= 25 & Age <= 44 ~ "25-44",
+      Age >= 45 & Age <= 64 ~ "45-64",
+      Age >= 65 & Age <= 74 ~ "65-74",
+      Age >= 75            ~ "75 and over",
+      
+    )
+  ) %>%
+  dplyr::select(Age.group, Group=Sex) %>%
+  dplyr::group_by(Age.group, Group) %>%
+  dplyr::summarise(Count = n()) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(Group) %>%
+  dplyr::mutate(
+    Prop = Count / sum(Count)
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(
+    Source = "UKTUS"
+  ) %>%
+  dplyr::select(
+    Age.group,
+    Count,
+    Group,
+    Source,
+    Prop
+  )
+  
+  
+combined_data_single_hh <- rbind(
+  uktus_single_hh,
+  ons_single_hh_age
+)
+
+p3 <- ggplot(combined_data_single_hh, aes(x=Age.group, y=Prop, fill=Source)) +
+  geom_bar(stat="identity", alpha=0.5, position="dodge") +
+  facet_wrap(~ Group) +
+  labs(
+    title = "Single-Occupancy Households (Relative Freq. by Age and Sex)",
+    x = "Age-group",
+    y = "Relative Freq (Proportion)"
+  )
+
+ggsave(p3, filename = "../output/graphics/single_hh_by_age_sex_comparison.png", )
+
+p3
+
+```
+
+
+
+
