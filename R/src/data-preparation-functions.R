@@ -86,7 +86,7 @@ spread_by_individuals <- function(df_row){
     
     data.frame(
       
-      # This selects the age info for each houehold member, then converts
+      # This selects the age info for each household member, then converts
       # from one row dataframe to a character vector
       Age = df_row[, paste0("DVAge_P", 1:household_size)] %>% as.character(),
       
