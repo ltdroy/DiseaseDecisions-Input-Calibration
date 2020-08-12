@@ -141,9 +141,16 @@ prepare_ons_hhsize_data <- function(df){
   
 }
 
+#' Prepare UKTUS output data for comparison with ONS aggregate data (HH size distribution)
+#'
+#' @param df The final processed data from this repo
+#'           output/final-processed-data/model-pop-final.csv
+#'
+#' @return
+#' @export
+#'
+#' @examples
 prepare_UKTUS_data_for_hh_size_comp <- function(df){
-  
-  
   
   df <- df %>%
     dplyr::group_by(HH_id) %>%
