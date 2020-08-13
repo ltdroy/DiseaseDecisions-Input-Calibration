@@ -1,4 +1,203 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# Title
+# realistic-hh-demography-4-ABM
+
+The purpose of this repo is to encapsulate all of the R code needed to
+generate a data-file containing a ‘realistic’ synthetic population of
+individuals within households. The repo aims to make this process a full
+reproducible analytical pipeline (RAP), such that the full
+transformation from raw data sources external to the repo, into the
+required file can be achieved by users by running a single script.
+
+The function of the final processed data file for end users is to serve
+as input for an agent-based model (or similar simulation). Using the
+data-file: `model-pop-final.csv` (which is generated in
+`output/final-processed-data` after `R/makefile/makefile.R` is run)
+users can create agent-based models with realistic demographic structure
+(age, sex and household composition), by reading the data file into
+their own models.
+
+Here ‘realistic’ means having a demographic structure similar to that of
+the United Kingdom (although at a smaller scale) - rather than having a
+structure identical to any particular local area. Users who are able to
+run large scale simulations can ‘upsample’ from the data-file (randomly
+sample with replacement) to create a population at UK scale - although
+users should be aware that any ideosyncracies in the sample data that
+this repo draws on might be magnified in this case.
+
+A secondary aim of the repo is to compare the final data-file to
+aggregate statistics published by the UK Gov [Office of National
+Statistics](https://www.ons.gov.uk/) (ONS). This is done automatically
+by `makefile.R`, and visualizations comparing the demographic structure
+of `model-pop-final.csv` to the structure of the UK population given by
+ONS are included later in this readme (and as JPEG files in
+`output/graphics`)
+
+## Who can use this repo?
+
+The code in the repo is provided under the [MIT
+license](https://github.com/ltdroy/realistic-hh-demography-4-ABM/blob/master/LICENSE).
+
+The ONS data used as ‘validation’ of the output data file is provided
+with this repo under the [Open Government Licence
+(v3.0)](http://www.nationalarchives.gov.uk/doc/open-government-licence).
+Further details of the relevant data files used are provided below.
+
+This repo also relies on data from the [UK Time Use
+Survey 2014-2015](https://beta.ukdataservice.ac.uk/datacatalogue/studies/study?id=8128)
+(UKTUS). This data is publically available through the [UK Data
+Service](https://beta.ukdataservice.ac.uk/datacatalogue/studies/study?id=8128).
+However, it cannot be included in the repo directly due to the terms of
+use. To use this repo, this data should be downloaded and stored in a
+folder `input/UKTUS-DATA` within the repo. Instructions for doing this
+are included below.
+
+## How to use this repo
+
+### Step 1: Clone this repo to your local machine
+
+Using whatever git-based tool you prefer, clone this repo to your local
+machine. All file paths in the repo are relative to the root directory
+of your copy of the repo (this should be your working directory in
+R/RStudio).
+
+### Step 2: Add UKTUS data
+
+The UK Time Use Survey 2014-2015 (UKTUS) is publically available via the
+[UK Data
+Serice](https://beta.ukdataservice.ac.uk/datacatalogue/studies/study?id=8128).
+The data files associated with this study must be downloaded **in SPSS
+(.sav)** format and extracted to a folder `~/input/UKTUS-Data` (where
+`~` refers to the root directory of the repo).
+
+To access the files you will need to register/log-in to the UK
+data-service, create a project, and add the relevant files to that
+project. The UK Data Service publishes [a guide to accessing files on
+the site](https://www.ukdataservice.ac.uk/get-data/how-to-access.aspx).
+
+The only file from the UK Time Use Survey 2015-2015 currently required
+is `uktus15_household.sav`. `makefile.R` expects to find this file in
+`input/UKTUS-Data`.
+
+### Step 3: Run `makefile.R`
+
+Assuming that you have make the repo your working directory, in your R
+console, type:
+
+    library(fs)
+    source(fs::path("R", "makefile", "makefile.R))
+
+Now wait for the script to run. The script first does the following:
+
+1.  Loads the libraries required by the repo
+2.  Adds additional folders to the repo, which will hold output data and
+    intermediate files
+3.  Loads the contents of `uktus15_household.sav`: labels the variables
+    using SPSS value labels, filters unproductive survey responses (see
+    below). This is stored in the global environment as `hhdata`.
+4.  ‘Explodes’ the household-level data, to produce individual level
+    data for the members of each household. This is stored in the global
+    environment as `hh_ind`.
+5.  Writes two copes of `hh_ind` to `output/final-processed-data`. One
+    is in CSV format (`model-pop-final.csv`), one is in RDS (R object)
+    format (`model-pop-final.RDS`).
+
+The rest of the work done by the script is to run tests of the code, and
+to compare `model-pop-final.csv` to ONS data as a validation of the
+underlying approach. **Note that if errors (not warnings) appear here,
+then something has gone wrong, and the `model-pop-final` file(s) should
+be treated with caution**. If this occurs, please raise an issue on the
+repo github page and I will aim to help diagnose the problem quickly.
+
+6.  Runs tests to compare `hhdata` and `hh_ind` to ensure the conversion
+    was successful (this actually highlighted integrity problems with
+    the UKTUS data, but these dont appear to affect the
+    `model-pop-final.csv` file, see below).
+7.  Builds files which log the parts of the original UKTUS data which
+    failed integrity checks (users can ignore these files, see below)
+8.  Transforms published ONS data (stored in
+    `input/ONS-Validation-Data`) into a format that can more easily be
+    compared to the `model-pop-final.csv` file.
+9.  Conducts further transformations of ONS data, and UKTUS data to
+    enable comparision, then builds and saves graphical comparisons in
+    `output/graphics` (see below).
+
+### Step 4: Use the `model-pop-final.csv` file
+
+The `makefile.R` script will generate a CSV data file
+`model-pop-final.csv` and save it in the output folder
+`output/final-processed-data`.
+
+This file is in tidy format, the rows represent individuals, and the
+columns represent attributes of those individuals.
+
+``` r
+
+library(tibble)
+output_data <- read.csv(fs::path("output", "final-processed-data", "model-pop-final.csv"))
+tibble::glimpse(output_data)
+#> Rows: 10,292
+#> Columns: 5
+#> $ X     <int> 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, ...
+#> $ Age   <int> 48, 50, 16, 13, 75, 75, 68, 74, 69, 60, 29, 36, 3, 1, 69, 70, 41, 44, 14, 12, 4...
+#> $ Sex   <chr> "Female", "Male", "Male", "Male", "Male", "Female", "Female", "Male", "Male", "...
+#> $ Size  <int> 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 3...
+#> $ HH_id <int> 11011202, 11011202, 11011202, 11011202, 11011203, 11011203, 11011207, 11011207,...
+```
+
+This data file contains the following variables:
+
+1.  `X` - row index
+2.  `Age` - Age of the individual in years
+3.  `Sex` - Sex of the individual \(\{Male, Female\}\)
+4.  `Size` - Number of other individuals in the data who share this
+    individual’s household
+5.  `HH_id` - A numeric ID representing the household of the individual
+
+Users can copy this file into their ABM modelling project, and use it to
+‘seed’ a synthetic population of agents who can be grouped into
+realistic households based on their `HH_id` attribute. (individuals in
+the same household have the same `HH_id`). The approach taken in the
+repo (see below) aims to provide a population of individuals which has
+realistic demography at the individual (age and sex distributions), and
+the household (household sizes and compositions) levels (see below).
+This is achieved through using data on individuals sampled directly from
+the UK population (see below).
+
+## How does it work?
+
+### Data sources
+
+#### The UK Time Use Survey 2014-2015
+
+The UKTUS study was conducted by a commercial social research service,
+NatCen, along with the Northern Ireland Statistics and Research Agency
+(NISRA) - on behalf of the Centre for Time Use Research (CTUR) [(NatCen,
+2016,
+p.1)](ref/technical-documentation/CTUS%20Documentation/8128_natcen_reports.pdf)
+
+The UKTUS study targeted a representative sample of households and
+individuals in the UK [(NatCen, 2016,
+p.4)](ref/technical-documentation/CTUS%20Documentation/8128_natcen_reports.pdf).
+It was carried out between April 2014 and December 2016 [(NatCen, 2016,
+p.2)](ref/technical-documentation/CTUS%20Documentation/8128_natcen_reports.pdf).
+It aimed to collect detailed measures on the daily time-use of *all
+members of each household* aged 8 and above [(NatCen, 2016,
+p.2)](ref/technical-documentation/CTUS%20Documentation/8128_natcen_reports.pdf).
+
+It also recorded basic information about *all household members below
+this age* (measured age and sex), see below. The availability of this
+household composition data makes the UKTUS dataset ideally suited for
+the purposes of synthetic population generation. In essence, it provides
+a basic demographic census of all members of a representative sample of
+households. This information is reffered to as the *household grid* as
+is stored in the `uktus15_household.sav` (which is why it is the
+required file for this repo):
+
+> > > “The household file (uktus15\_household) contains data collected
+> > > in the household interview. This includes information from the
+> > > household grid providing information on the gender, age, paid work
+> > > status, and relationship status of every member of the household.”
+> > > [(CTUR, 2016,
+> > > p.4)](ref/technical-documentation/CTUS%20Documentation/8128_ctur_report.pdf)
